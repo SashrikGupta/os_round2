@@ -96,12 +96,11 @@ def stream_camera():
         socketio.emit('new_frame', {'image': jpg_as_text, "bb": bb_as_text})
 
         # Add a small delay to simulate frame rate
-        time.sleep(1 / 30)  # Simulate 30 FPS
+        time.sleep(1 / 20)  # Simulate 30 FPS
         frame_count += 1
 
     cap.release()
     print("Camera streaming completed")
 
 if __name__ == '__main__':
-    # Run the Flask app without auto-reloading in production
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
