@@ -1,0 +1,6 @@
+Flask
+flask-socketio
+opencv-python
+base64
+ultralytics
+Pillow
