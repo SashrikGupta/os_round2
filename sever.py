@@ -46,12 +46,14 @@ def stream_video(video_path, bounding_boxes):
         # Draw YOLO bounding boxes
         for result in results[0].boxes:
             class_id = int(result.cls.item())  # Get the class ID
+            track_id = int(result.id.item())  # Get the tracking ID
+
             if class_id == 0:  # 0 is usually the class ID for "person"
                 x1, y1, x2, y2 = map(int, result.xyxy[0])
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)  # Green bounding box
                 cv2.putText(
                     frame,
-                    f"ID: {class_id}",
+                    f"ID: {track_id}",
                     (x1, y1 - 10),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.5,
@@ -125,6 +127,8 @@ def main():
 
     # Stop streaming button
     if st.button("Stop Streaming"):
+        global streaming
+        streaming = False
         st.success("Streaming stopped")
 
 
