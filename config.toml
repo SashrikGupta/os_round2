@@ -1,0 +1,3 @@
+[deprecation]
+# Suppress deprecation warnings
+showfileUploaderEncoding = false
