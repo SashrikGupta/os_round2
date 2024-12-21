@@ -81,7 +81,7 @@ def stream_video(video_path, bounding_boxes):
         frame_placeholder.image("data:image/jpeg;base64," + bb_as_text, use_container_width=True)
 
         # Add a small delay to simulate frame rate (to control FPS)
-        time.sleep(0.03)
+        time.sleep(1/20)
         frame_count += 1
 
     cap.release()
