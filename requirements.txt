@@ -3,3 +3,4 @@ flask-socketio
 opencv-python-headless
 ultralytics
 Pillow
+lap
