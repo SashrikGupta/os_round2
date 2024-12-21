@@ -48,12 +48,30 @@ def stream_video(video_path, bounding_boxes):
             class_id = int(result.cls.item())  # Get the class ID
             if class_id == 0:  # 0 is usually the class ID for "person"
                 x1, y1, x2, y2 = map(int, result.xyxy[0])
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)  # Green bounding box
+                cv2.putText(
+                    frame,
+                    f"ID: {class_id}",
+                    (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),  # Green text
+                    2
+                )
 
         # Draw each user-defined bounding box
         for box in bounding_boxes:
             x1, y1, x2, y2 = box['x1'], box['y1'], box['x2'], box['y2']
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 0), 2)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 0), 2)  # Yellow bounding box
+            cv2.putText(
+                frame,
+                "User-defined",
+                (x1, y1 - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (255, 255, 0),  # Yellow text
+                2
+            )
 
         # Encode frame as base64 for Streamlit display
         _, bb_box_data = cv2.imencode('.jpg', frame)
@@ -61,7 +79,7 @@ def stream_video(video_path, bounding_boxes):
         frame_placeholder.image("data:image/jpeg;base64," + bb_as_text, use_container_width=True)
 
         # Add a small delay to simulate frame rate (to control FPS)
-        
+        time.sleep(0.03)
         frame_count += 1
 
     cap.release()
@@ -107,7 +125,6 @@ def main():
 
     # Stop streaming button
     if st.button("Stop Streaming"):
-
         st.success("Streaming stopped")
 
 
