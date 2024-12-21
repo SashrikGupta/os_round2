@@ -127,8 +127,6 @@ def main():
 
     # Stop streaming button
     if st.button("Stop Streaming"):
-        global streaming
-        streaming = False
         st.success("Streaming stopped")
 
 
