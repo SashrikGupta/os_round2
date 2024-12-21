@@ -1,14 +1,11 @@
-from flask import Flask, request, jsonify
-from flask_socketio import SocketIO, emit
+import streamlit as st
 import cv2
 import base64
 import time
+import json
 from ultralytics import YOLO
 import os
-import json
-
-app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
+from PIL import Image
 
 # Path to the YOLO model
 model_path = r'yolo11s.pt'
@@ -21,43 +18,13 @@ streaming = False
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-@app.route('/upload_video', methods=['POST'])
-def upload_video():
-    """Handle video upload and start streaming.""" 
-    global streaming
-
-    video = request.files.get('video')
-    bounding_boxes = request.form.get('bounding_box')
-
-    if video:
-        video_path = os.path.join(UPLOAD_FOLDER, video.filename)
-        video.save(video_path)
-
-        if not streaming:
-            streaming = True
-            # Send the bounding boxes along with the video path for processing
-            socketio.start_background_task(target=stream_video, video_path=video_path, bounding_boxes=bounding_boxes)
-
-        return jsonify({"success": True, "video_path": video_path})
-    return jsonify({"success": False, "error": "No file uploaded"}), 400
-
-@socketio.on('connect')
-def handle_connect():
-    print("Client connected")
-
-@socketio.on('stop_camera_stream')
-def stop_camera_stream():
-    global streaming
-    streaming = False
-    print("Camera feed stopped")
-
 def stream_video(video_path, bounding_boxes):
     """Stream video with bounding boxes for persons only."""
     global streaming
     cap = cv2.VideoCapture(video_path)
 
     if not cap.isOpened():
-        print("Error opening video file")
+        st.error("Error opening video file")
         return
 
     # Parse bounding boxes from the frontend (expecting a JSON array of boxes)
@@ -76,6 +43,10 @@ def stream_video(video_path, bounding_boxes):
     height_ratio = target_height / original_height
 
     frame_count = 0
+
+    # Create a placeholder for the video stream in Streamlit
+    frame_placeholder = st.empty()
+
     while cap.isOpened() and streaming:
         success, frame = cap.read()
         if not success:
@@ -112,19 +83,64 @@ def stream_video(video_path, bounding_boxes):
             # Draw the resized user-defined zone bounding box
             cv2.rectangle(frame, (x1_resized, y1_resized), (x2_resized, y2_resized), (255, 255, 0), 2)
 
-        # Encode frame as base64
+        # Encode frame as base64 for Streamlit display
         _, bb_box_data = cv2.imencode('.jpg', frame)
         bb_as_text = base64.b64encode(bb_box_data).decode('utf-8')
 
-        # Send the processed frame via WebSocket
-        socketio.emit('new_frame', {'image': bb_as_text})
+        # Update the image displayed in Streamlit by using the placeholder
+        frame_placeholder.image("data:image/jpeg;base64," + bb_as_text, use_column_width=True)
 
-        # Add a small delay to simulate frame rate
+        # Add a small delay to simulate frame rate (to control FPS)
         time.sleep(1 / 20)  # Simulate 20 FPS
         frame_count += 1
 
     cap.release()
-    print("Video streaming completed")
+    st.success("Video streaming completed")
 
-if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False ,  allow_unsafe_werkzeug=True)
+def main():
+    st.title("YOLO Object Detection with Bounding Boxes")
+
+    # Video upload section
+    uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
+    
+    if uploaded_video is not None:
+        # Only process the video after it's uploaded
+        video_path = os.path.join(UPLOAD_FOLDER, uploaded_video.name)
+        print(video_path)
+        with open(video_path, "wb") as f:
+            f.write(uploaded_video.getbuffer())
+        
+        st.success("Video uploaded successfully")
+    else:
+        video_path = None
+
+    # Bounding box input section
+    st.header("Define Bounding Boxes")
+
+    bounding_boxes = []
+    add_box = st.button("Add Bounding Box")
+    if add_box:
+        x1 = st.number_input("x1", min_value=0, value=0)
+        y1 = st.number_input("y1", min_value=0, value=0)
+        x2 = st.number_input("x2", min_value=0, value=640)
+        y2 = st.number_input("y2", min_value=0, value=360)
+        bounding_boxes.append({'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2})
+        st.write(f"Bounding Box added: {bounding_boxes[-1]}")
+
+    # Start streaming button
+    if st.button("Start Video Streaming"):
+            if video_path:
+                global streaming
+                streaming = True
+                stream_video(video_path, json.dumps(bounding_boxes))
+            else:
+                st.error("Video upload failed. Please try again.")
+
+    # Stop streaming button
+    if st.button("Stop Streaming"):
+        streaming = False
+        st.success("Streaming stopped")
+
+if __name__ == "__main__":
+    main()
+
