@@ -58,7 +58,7 @@ def stream_video(video_path, bounding_boxes):
         # Encode frame as base64 for Streamlit display
         _, bb_box_data = cv2.imencode('.jpg', frame)
         bb_as_text = base64.b64encode(bb_box_data).decode('utf-8')
-        frame_placeholder.image("data:image/jpeg;base64," + bb_as_text, use_column_width=True)
+        frame_placeholder.image("data:image/jpeg;base64," + bb_as_text, use_container_width=True)
 
         # Add a small delay to simulate frame rate (to control FPS)
         
