@@ -54,7 +54,6 @@ def stream_video(video_path, bounding_boxes, zones):
 
     zones = json.loads(zones or "[]")
     threshold_chart_data = {
-        'frame': [],
         'threshold': [],
     }
 
@@ -123,7 +122,7 @@ def stream_video(video_path, bounding_boxes, zones):
         zone_person_count = []
         threshold = person_count / total_zones if total_zones > 0 else 0
 
-        threshold_chart_data['frame'].append(runner)
+
         threshold_chart_data['threshold'].append(threshold)
 
         with center:
