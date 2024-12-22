@@ -187,7 +187,7 @@ def stream_video(video_path, bounding_boxes, zones):
                 row = zone_index // num_columns
                 col = zone_index % num_columns
 
-                zone_placeholders[row][col].line_chart(chart_data, key=f"zone_chart_{zone_id}")
+                zone_placeholders[row][col].line_chart(chart_data)
 
         _, bb_box_data = cv2.imencode('.jpg', frame)
         bb_as_text = base64.b64encode(bb_box_data).decode('utf-8')
