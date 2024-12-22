@@ -127,7 +127,7 @@ def stream_video(video_path, bounding_boxes, zones):
         threshold_chart_data['threshold'].append(threshold)
 
         with center:
-            threshold_chart_placeholder.line_chart(threshold_chart_data, key="threshold_chart")
+            threshold_chart_placeholder.line_chart(threshold_chart_data)
 
         for zone in zones:
             zone_id = zone['id']
