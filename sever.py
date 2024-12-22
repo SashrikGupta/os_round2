@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import altair as alt
 import streamlit.components.v1 as components
-from collections import set 
 # Define the HTML, CSS, and JavaScript content for the AI Analysis section
 bb_as_text = ""
 
