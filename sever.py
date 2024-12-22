@@ -54,29 +54,27 @@ def stream_video(video_path, bounding_boxes, zones):
 
     zones = json.loads(zones or "[]")
     threshold_chart_data = {
-        'frame' : [] , 
-        'threshold' : [],
+        'frame': [],
+        'threshold': [],
     }
-    # Variables to store stats
+
     zone_stats = {zone['id']: {'footfall': set(), 'current_persons': 0, 'high_density_time': [], 'above_threshold': False, 'history': []} for zone in zones}
-    footfall_data = {zone['id']: [] for zone in zones}  # Initialize footfall data for each zone
+    footfall_data = {zone['id']: [] for zone in zones}
     total_zones = len(zones)
     frame_count = 0
 
-    with center: 
-        frame_placeholder = st.empty()  # Placeholder for video stream display
-        threshold_cart_placeholder = st.empty()
-    with right: 
+    with center:
+        frame_placeholder = st.empty()
+        threshold_chart_placeholder = st.empty()
+    with right:
         heatmap_placeholder = st.empty()
-        stats_placeholder = st.empty()  # Placeholder for stats and graphs
+        stats_placeholder = st.empty()
         pie_chart_placeholder = st.empty()
 
-    # Display the graphs in a grid layout
     zone_placeholders = {}
-    num_columns = 3  # You wanted a 4x3 grid, so we have 3 columns
-    num_rows = (len(zones) + num_columns - 1) // num_columns  # Calculate the number of rows based on zones
+    num_columns = 3
+    num_rows = (len(zones) + num_columns - 1) // num_columns
 
-    # Creating a grid of placeholders for the charts
     for i, zone in enumerate(zones):
         col = i % num_columns
         row = i // num_columns
@@ -84,7 +82,8 @@ def stream_video(video_path, bounding_boxes, zones):
             zone_placeholders[row] = []
 
         zone_placeholders[row].append(st.empty())
-    runner=0
+
+    runner = 0
     while cap.isOpened() and streaming:
         success, frame = cap.read()
         if not success:
@@ -93,7 +92,7 @@ def stream_video(video_path, bounding_boxes, zones):
         heatmap_frame = generate_heatmap(frame)
         _, heatmap_data = cv2.imencode('.jpg', heatmap_frame)
         heatmap_as_text = base64.b64encode(heatmap_data).decode('utf-8')
-        heatmap_placeholder.image(f"data:image/jpeg;base64,{heatmap_as_text}", use_column_width=True)
+        heatmap_placeholder.image(f"data:image/jpeg;base64,{heatmap_as_text}", use_container_width=True)
 
         results = bb_box_model.track(frame, persist=True, verbose=False)
 
@@ -104,10 +103,10 @@ def stream_video(video_path, bounding_boxes, zones):
             class_id = int(result.cls.item())
             track_id = int(result.id.item())
 
-            if class_id == 0:  # 0 is usually the class ID for "person"
+            if class_id == 0:
                 person_count += 1
                 x1, y1, x2, y2 = map(int, result.xyxy[0])
-                cx, cy = (x1 + x2) // 2, (y1 + y2) // 2  # Center of bounding box
+                cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
                 tracked_centers.append({'track_id': track_id, 'center': (cx, cy)})
 
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
@@ -120,16 +119,15 @@ def stream_video(video_path, bounding_boxes, zones):
                     (0, 255, 0),
                     2
                 )
+
         zone_person_count = []
         threshold = person_count / total_zones if total_zones > 0 else 0
 
         threshold_chart_data['frame'].append(runner)
-        threshold_chart_data['threshold'].append(threshold) 
-        
+        threshold_chart_data['threshold'].append(threshold)
 
         with center:
-            threshold_cart_placeholder.line_chart(threshold_chart_data)
-
+            threshold_chart_placeholder.line_chart(threshold_chart_data, key="threshold_chart")
 
         for zone in zones:
             zone_id = zone['id']
@@ -144,6 +142,7 @@ def stream_video(video_path, bounding_boxes, zones):
 
             zone_info['current_persons'] = current_zone_count
             zone_person_count.append(current_zone_count)
+
             if current_zone_count > threshold:
                 if not zone_info['above_threshold']:
                     zone_info['high_density_time'].append({'start_time': frame_count})
@@ -155,16 +154,14 @@ def stream_video(video_path, bounding_boxes, zones):
 
             zone_info['history'].append((frame_count, current_zone_count, len(zone_info['footfall'])))
 
-            # Update the footfall data for the current zone
             for person in tracked_centers:
                 if is_center_in_zone(person['center'], zone):
                     footfall_data[zone_id].append(person['track_id'])
 
-            # Draw zone on frame
             if current_zone_count > threshold:
-                cv2.rectangle(frame, (zone['x1'], zone['y1']), (zone['x2'], zone['y2']), (0, 0, 255), 2)  # Red box for high density zones
+                cv2.rectangle(frame, (zone['x1'], zone['y1']), (zone['x2'], zone['y2']), (0, 0, 255), 2)
             else:
-                cv2.rectangle(frame, (zone['x1'], zone['y1']), (zone['x2'], zone['y2']), (255, 255, 0), 2)  # Yellow box for low density zones
+                cv2.rectangle(frame, (zone['x1'], zone['y1']), (zone['x2'], zone['y2']), (255, 255, 0), 2)
 
             cv2.putText(
                 frame,
@@ -176,43 +173,39 @@ def stream_video(video_path, bounding_boxes, zones):
                 2
             )
 
-            # Extract the history for the current zone
             history = np.array(zone_info['history'])
             if history.size > 0:
-                # Update the chart for the current zone
-                footfall = history[:, 2]  # Footfall data
-                current_count = history[:, 1]  # Current persons data
+                footfall = history[:, 2]
+                current_count = history[:, 1]
 
-                # Create a dataframe for line chart visualization
                 chart_data = {
                     'Footfall': footfall,
                     'Current Persons': current_count
                 }
 
-                # Determine the appropriate placeholder for this zone's chart
-                zone_index = int(zone_id.split('_')[-1]) - 1  # Extract numeric part from "Zone_X" and use as index
+                zone_index = int(zone_id.split('_')[-1]) - 1
                 row = zone_index // num_columns
                 col = zone_index % num_columns
 
-                # Update chart for the current zone
-                zone_placeholders[row][col].line_chart(chart_data)
+                zone_placeholders[row][col].line_chart(chart_data, key=f"zone_chart_{zone_id}")
 
-        # Update the Streamlit frame display
         _, bb_box_data = cv2.imencode('.jpg', frame)
         bb_as_text = base64.b64encode(bb_box_data).decode('utf-8')
-        with center: 
-            frame_placeholder.image("data:image/jpeg;base64," + bb_as_text, use_column_width=True)
+        with center:
+            frame_placeholder.image("data:image/jpeg;base64," + bb_as_text, use_container_width=True)
 
         pie_chart_data = {
             'Zone': [f"Zone {i+1}" for i in range(total_zones)],
             'Count': zone_person_count
         }
         pie_chart_fig = px.pie(
-            pie_chart_data, 
-            values='Count', 
-            names='Zone', 
+            pie_chart_data,
+            values='Count',
+            names='Zone',
         )
-        pie_chart_placeholder.plotly_chart(pie_chart_fig, use_column_width=True)
+        pie_chart_placeholder.plotly_chart(pie_chart_fig, use_column_width=True, key=f"pie_chart_{runner}")
+
+        runner += 1
 
     cap.release()
     st.success("Video streaming completed")
