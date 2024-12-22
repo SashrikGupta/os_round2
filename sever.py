@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import altair as alt
 import streamlit.components.v1 as components
-
+from collections import set 
 # Define the HTML, CSS, and JavaScript content for the AI Analysis section
 bb_as_text = ""
 
@@ -57,7 +57,7 @@ def stream_video(video_path, bounding_boxes, zones):
         'threshold': [],
     }
 
-    zone_stats = {zone['id']: {'footfall': set(), 'current_persons': 0, 'high_density_time': [], 'above_threshold': False, 'history': []} for zone in zones}
+    zone_stats = {zone['id']: {'footfall': set(), 'current_persons': 0, 'unique_persons': set(), 'high_density_time': [], 'above_threshold': False, 'history': []} for zone in zones}
     footfall_data = {zone['id']: [] for zone in zones}
     total_zones = len(zones)
     frame_count = 0
@@ -122,7 +122,6 @@ def stream_video(video_path, bounding_boxes, zones):
         zone_person_count = []
         threshold = person_count / total_zones if total_zones > 0 else 0
 
-
         threshold_chart_data['threshold'].append(threshold)
 
         with center:
@@ -136,8 +135,12 @@ def stream_video(video_path, bounding_boxes, zones):
             for person in tracked_centers:
                 if is_center_in_zone(person['center'], zone):
                     current_zone_count += 1
+
                     if person['track_id'] not in zone_info['footfall']:
                         zone_info['footfall'].add(person['track_id'])
+
+                    if person['track_id'] not in zone_info['unique_persons']:
+                        zone_info['unique_persons'].add(person['track_id'])
 
             zone_info['current_persons'] = current_zone_count
             zone_person_count.append(current_zone_count)
@@ -151,24 +154,17 @@ def stream_video(video_path, bounding_boxes, zones):
                     zone_info['high_density_time'][-1]['end_time'] = frame_count
                     zone_info['above_threshold'] = False
 
-            zone_info['history'].append((frame_count, current_zone_count, len(zone_info['footfall'])))
+            zone_info['history'].append((frame_count, current_zone_count, len(zone_info['footfall']), len(zone_info['unique_persons'])))
 
-            for person in tracked_centers:
-                if is_center_in_zone(person['center'], zone):
-                    footfall_data[zone_id].append(person['track_id'])
-
-            if current_zone_count > threshold:
-                cv2.rectangle(frame, (zone['x1'], zone['y1']), (zone['x2'], zone['y2']), (0, 0, 255), 2)
-            else:
-                cv2.rectangle(frame, (zone['x1'], zone['y1']), (zone['x2'], zone['y2']), (255, 255, 0), 2)
-
+            color = (0, 0, 255) if current_zone_count > threshold else (255, 255, 0)
+            cv2.rectangle(frame, (zone['x1'], zone['y1']), (zone['x2'], zone['y2']), color, 2)
             cv2.putText(
                 frame,
-                f"Zone {zone_id}: {current_zone_count} Persons",
+                f"Zone {zone_id}: {current_zone_count} Persons, {len(zone_info['unique_persons'])} Unique",
                 (zone['x1'], zone['y1'] - 10),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
-                (255, 255, 0),
+                color,
                 2
             )
 
