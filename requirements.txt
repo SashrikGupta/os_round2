@@ -11,4 +11,3 @@ matplotlib
 pandas
 altair
 shapely
-libgl1-mesa-glx
