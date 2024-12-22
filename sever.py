@@ -173,7 +173,6 @@ def stream_video(video_path, bounding_boxes, zones):
                 current_count = history[:, 1]
 
                 chart_data = {
-                    'Footfall': footfall,
                     'Current Persons': current_count
                 }
 
