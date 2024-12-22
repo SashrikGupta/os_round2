@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import altair as alt
 import streamlit.components.v1 as components
+import requests
 # Define the HTML, CSS, and JavaScript content for the AI Analysis section
 bb_as_text = ""
 
@@ -34,13 +35,31 @@ streaming = False
 # Create an upload folder
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+def highlight_density(row):
+    if row['density'] == 'UNSTABLE':
+        return [f'background-color: rgba(255, 0, 0, 0.3)'] * len(row)  # Red with 30% opacity
+    else:
+        return [f'background-color: rgba(0, 255, 0, 0.3)'] * len(row)  # Green with 30% opacity
+
 def generate_heatmap(frame):
     return heatmap_model.generate_heatmap(frame)
 # Function to check if a point is inside a rectangular zone
 def is_center_in_zone(center, zone):
     x, y = center
     return zone['x1'] <= x <= zone['x2'] and zone['y1'] <= y <= zone['y2']
-
+def download_video_from_url(video_url, save_path):
+    """Downloads video from a URL and saves it to the specified path."""
+    try:
+        response = requests.get(video_url, stream=True)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        with open(save_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        return True, "Video downloaded successfully"
+    except Exception as e:
+        return False, str(e)
 # Stream video and process
 def stream_video(video_path, bounding_boxes, zones):
     global streaming
@@ -53,7 +72,7 @@ def stream_video(video_path, bounding_boxes, zones):
 
     zones = json.loads(zones or "[]")
     threshold_chart_data = {
-        'threshold': [],
+        'total_person': [],
     }
 
     zone_stats = {zone['id']: {'footfall': set(), 'current_persons': 0, 'unique_persons': set(), 'high_density_time': [], 'above_threshold': False, 'history': []} for zone in zones}
@@ -63,26 +82,45 @@ def stream_video(video_path, bounding_boxes, zones):
 
     with center:
         frame_placeholder = st.empty()
+        st.write(f"**total count**")
         threshold_chart_placeholder = st.empty()
     with right:
         heatmap_placeholder = st.empty()
         stats_placeholder = st.empty()
+        st.write(f"**Zone wise Pie Chart**")
         pie_chart_placeholder = st.empty()
 
     zone_placeholders = {}
-    num_columns = 3
-    num_rows = (len(zones) + num_columns - 1) // num_columns
 
-    for i, zone in enumerate(zones):
-        col = i % num_columns
-        row = i // num_columns
-        if row not in zone_placeholders:
-            zone_placeholders[row] = []
-
-        zone_placeholders[row].append(st.empty())
+    with st.container():  # Use a full-width container
+        for i, zone in enumerate(zones):
+                st.write(f"**Graph for {zone['id']}**")
+                zone_placeholders[zone["id"]] = st.empty() 
 
     runner = 0
+
+    with st.sidebar : 
+        st.title("Analytics Tab")
+        st.write(f"**Current Statistics**")
+        table_placeholder = st.empty()
+        info_placeholder = st.empty()
+        st.write(f"**High density Zone Distribution**")
+        zone_threshold_placeholder = st.empty()
+
+    zone_boke = {f'{zone["id"]}' : [] for zone in zones}
+
+
+    
+
+
     while cap.isOpened() and streaming:
+        unstability_flag = False 
+        df = {
+                'zones' :   [] , 
+                'count' :   [] , 
+                'density' : [] ,  
+                'emoji' :   []
+            }
         success, frame = cap.read()
         if not success:
             break
@@ -119,15 +157,22 @@ def stream_video(video_path, bounding_boxes, zones):
                 )
 
         zone_person_count = []
-        threshold = person_count / total_zones if total_zones > 0 else 0
+        threshold = 0.4
 
-        threshold_chart_data['threshold'].append(threshold)
+        threshold_chart_data['total_person'].append(person_count)
 
         with center:
             threshold_chart_placeholder.line_chart(threshold_chart_data)
 
+        df['zones'].append('full')
+        df['count'].append(person_count)
+        print(person_count)
+        df['density'].append('')
+        df['emoji'].append('')
+
         for zone in zones:
             zone_id = zone['id']
+            df['zones'].append(zone_id)
             zone_info = zone_stats[zone_id]
             current_zone_count = 0
 
@@ -143,19 +188,27 @@ def stream_video(video_path, bounding_boxes, zones):
 
             zone_info['current_persons'] = current_zone_count
             zone_person_count.append(current_zone_count)
+            df['count'].append(current_zone_count)
 
-            if current_zone_count > threshold:
+            if current_zone_count/person_count > threshold:
                 if not zone_info['above_threshold']:
                     zone_info['high_density_time'].append({'start_time': frame_count})
                     zone_info['above_threshold'] = True
+                df['density'].append('UNSTABLE')
+                df['emoji'].append('❌')
+                zone_boke[zone_id].append(1)
+                unstability_flag = True 
             else:
                 if zone_info['above_threshold']:
                     zone_info['high_density_time'][-1]['end_time'] = frame_count
                     zone_info['above_threshold'] = False
+                df['density'].append('STABLE')
+                df['emoji'].append('👍')
+                zone_boke[zone_id].append(0)
 
             zone_info['history'].append((frame_count, current_zone_count, len(zone_info['footfall']), len(zone_info['unique_persons'])))
 
-            color = (0, 0, 255) if current_zone_count > threshold else (255, 255, 0)
+            color = (0, 0, 255) if current_zone_count/person_count > threshold else (255, 255, 0)
             cv2.rectangle(frame, (zone['x1'], zone['y1']), (zone['x2'], zone['y2']), color, 2)
             cv2.putText(
                 frame,
@@ -176,11 +229,27 @@ def stream_video(video_path, bounding_boxes, zones):
                     'Current Persons': current_count
                 }
 
-                zone_index = int(zone_id.split('_')[-1]) - 1
-                row = zone_index // num_columns
-                col = zone_index % num_columns
+            
+            zone_placeholders[zone["id"]].line_chart(chart_data)
 
-                zone_placeholders[row][col].line_chart(chart_data)
+        if unstability_flag:
+            show_string = """ALERT : High Density at areas : 
+"""
+            for row in df:
+                try:
+                    # Ensure `row` is a dictionary before accessing keys
+                    if isinstance(row, dict) and 'count' in row and 'zones' in row:
+                        if row['count'] / person_count > threshold:
+                            show_string += f"Zone {row['zones']}, "
+                except Exception as e:
+                    print(f"Error processing row: {row}, Error: {e}")
+            show_string += """ 
+Please Send STAFF ❗❗"""
+
+            info_placeholder.error(show_string)
+        else : 
+            info_placeholder.success("all Good 👍")
+
 
         _, bb_box_data = cv2.imencode('.jpg', frame)
         bb_as_text = base64.b64encode(bb_box_data).decode('utf-8')
@@ -196,61 +265,76 @@ def stream_video(video_path, bounding_boxes, zones):
             values='Count',
             names='Zone',
         )
-        pie_chart_placeholder.plotly_chart(pie_chart_fig, use_column_width=True, key=f"pie_chart_{runner}")
+        pie_chart_placeholder.plotly_chart(pie_chart_fig, use_container_width=True, key=f"pie_chart_{runner}")
 
         runner += 1
-
+        table_placeholder.table(pd.DataFrame(df))
+        zone_threshold_placeholder.area_chart(zone_boke)
     cap.release()
     st.success("Video streaming completed")
 
 
 # Main function
 def main():
-    with left: 
-        st.title("YOLO Object Detection with Real-Time Zone Footfall")
-
+    # Initialize session state
+    with left : 
+        st.title("Realtime crowd Footfall and zone Analytics ")
+        # File uploader
         uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
         video_path = None
 
+        # URL input for video download
+        video_url = st.text_input("Or, enter video URL to download:")
+        if video_url:
+            video_name = os.path.basename(video_url)
+            video_path = os.path.join(UPLOAD_FOLDER, video_name)
+            if st.button("Download Video"):
+                success, message = download_video_from_url(video_url, video_path)
+                if success:
+                    st.success(f"Video downloaded successfully: {video_name}")
+                else:
+                    st.error(f"Failed to download video: {message}")
+
+        # Check if uploaded or downloaded video exists
         if uploaded_video is not None:
             video_path = os.path.join(UPLOAD_FOLDER, uploaded_video.name)
             with open(video_path, "wb") as f:
                 f.write(uploaded_video.getbuffer())
-            st.success("Video uploaded successfully")
+            st.success(f"Video uploaded successfully: {uploaded_video.name}")
 
-        num_zones = st.number_input("Enter the number of zones", min_value=0, value=0, step=1)
+        # Zone input within an expander (dropdown)
         zones = []
-        for i in range(num_zones):
-            st.write(f"Zone {i + 1}")
-            cols = st.columns(5)
-            zone_id = cols[0].text_input(f"ID for Zone {i + 1}", value=f"Zone_{i + 1}", key=f"id_{i}")
-            x1 = cols[1].number_input(f"x1 for Zone {i + 1}", min_value=0, value=0, key=f"x1_{i}")
-            y1 = cols[2].number_input(f"y1 for Zone {i + 1}", min_value=0, value=0, key=f"y1_{i}")
-            x2 = cols[3].number_input(f"x2 for Zone {i + 1}", min_value=0, value=640, key=f"x2_{i}")
-            y2 = cols[4].number_input(f"y2 for Zone {i + 1}", min_value=0, value=360, key=f"y2_{i}")
-            zones.append({'id': zone_id, 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2})
+        with st.expander("Zone Configuration", expanded=True):
+            num_zones = st.number_input("Enter the number of zones", min_value=0, value=0, step=1)
+            for i in range(num_zones):
+                st.write(f"Zone {i + 1}")
+                cols = st.columns(5)
+                zone_id = cols[0].text_input(f"ID for Zone {i + 1}", value=f"Zone_{i + 1}", key=f"id_{i}")
+                x1 = cols[1].number_input(f"x1 for Zone {i + 1}", min_value=0, value=0, key=f"x1_{i}")
+                y1 = cols[2].number_input(f"y1 for Zone {i + 1}", min_value=0, value=0, key=f"y1_{i}")
+                x2 = cols[3].number_input(f"x2 for Zone {i + 1}", min_value=0, value=640, key=f"x2_{i}")
+                y2 = cols[4].number_input(f"y2 for Zone {i + 1}", min_value=0, value=360, key=f"y2_{i}")
+                zones.append({'id': zone_id, 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2})
 
+        # Button to start video streaming
     if st.button("Start Video Streaming"):
-        # Clear the left column content
-        
-
         if video_path and os.path.exists(video_path):
+            st.session_state.stream_started = True  # Set stream_started flag
             global streaming
             streaming = True
-            
-            # Start video streaming after clearing the left column
+
             try:
                 stream_video(video_path, json.dumps(zones), json.dumps(zones))
             except Exception as e:
                 st.error("Error during streaming.")
                 st.exception(e)
         else:
-            st.error("Upload a valid video file first.")
+                st.error("Upload a valid video file first.")
 
 
-    
-    # Container where AI Analysis content will appear
-
+    # Analytics Tab
+    with st.sidebar:
+        st.title("Analytics Tab")
 
 if __name__ == "__main__":
     main()
