@@ -157,7 +157,7 @@ def stream_video(video_path, bounding_boxes, zones):
                 )
 
         zone_person_count = []
-        threshold = 0.4
+        threshold = 0.6
 
         threshold_chart_data['total_person'].append(person_count)
 
