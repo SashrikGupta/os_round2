@@ -4,3 +4,9 @@ opencv-python-headless
 ultralytics
 Pillow
 lap
+streamlit
+numpy
+plotly
+matplotlib
+pandas
+altair
